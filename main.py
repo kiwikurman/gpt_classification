@@ -43,18 +43,14 @@ def classify(batch, ix, b_size):
     return chat_completion['choices'][0]['message']['content']
 
 
-batch_size = 30
+batch_size = 15
 lines = read_lines()
 
 results = []
-##############################
-# no progress indication..
-# tests?
-# clean up the file at the end..
-##################################
-with ThreadPoolExecutor(max_workers=20) as executor:
+
+with ThreadPoolExecutor(max_workers=40) as executor:
     futures = {}
-    for i in range(0, len(lines[:1000]), batch_size):
+    for i in range(0, len(lines), batch_size):
         batch = lines[i:i + batch_size]
         future = executor.submit(classify, batch, i, batch_size)
         futures[future] = {'batch': batch, 'retry_count': 0}
