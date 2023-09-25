@@ -21,7 +21,7 @@ def read_lines():
     return lines
 
 
-def classify(batch, ix, b_size):
+def classify_batch(batch, ix, b_size):
     my_id = str(uuid.uuid4())[:4]
     print(f"{my_id} starting working on {ix} to {ix + b_size}")
 
@@ -46,7 +46,7 @@ def process_lines(lines, batch_size=15):
         futures = {}
         for i in range(0, len(lines), batch_size):
             batch = lines[i:i + batch_size]
-            future = executor.submit(classify, batch, i, batch_size)
+            future = executor.submit(classify_batch, batch, i, batch_size)
             futures[future] = {'batch': batch, 'retry_count': 0}
 
         while futures:
@@ -60,7 +60,7 @@ def process_lines(lines, batch_size=15):
                     print(f"Timeout for batch {batch}, retrying...")
                     if retry_count < 3:
                         # Resubmit the failed batch
-                        new_future = executor.submit(classify, batch, i, batch_size)
+                        new_future = executor.submit(classify_batch, batch, i, batch_size)
                         futures[new_future] = {'batch': batch, 'retry_count': retry_count + 1}
                     else:
                         print(f"Failed after {retry_count} retries.")
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     input_lines = read_lines()
 
     start_time = time.time()
-    results = process_lines(input_lines[:100])
+    results = process_lines(input_lines[:50])
     end_time = time.time()
 
     print(f"done in {end_time - start_time} seconds")
