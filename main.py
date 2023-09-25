@@ -2,10 +2,7 @@ import openai
 import json
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-
 import time
-
-start_time = time.time()
 
 # Open the file for reading
 with open('keys.json', 'r') as f:
@@ -43,43 +40,49 @@ def classify(batch, ix, b_size):
     return chat_completion['choices'][0]['message']['content']
 
 
-batch_size = 15
-lines = read_lines()
+def process_lines(lines, batch_size=15):
+    res = []
+    with ThreadPoolExecutor(max_workers=40) as executor:
+        futures = {}
+        for i in range(0, len(lines), batch_size):
+            batch = lines[i:i + batch_size]
+            future = executor.submit(classify, batch, i, batch_size)
+            futures[future] = {'batch': batch, 'retry_count': 0}
 
-results = []
-
-with ThreadPoolExecutor(max_workers=40) as executor:
-    futures = {}
-    for i in range(0, len(lines), batch_size):
-        batch = lines[i:i + batch_size]
-        future = executor.submit(classify, batch, i, batch_size)
-        futures[future] = {'batch': batch, 'retry_count': 0}
-
-    while futures:
-        for future in list(futures.keys()):  # Make a list from keys to iterate safely while removing items
-            batch = futures[future]["batch"]
-            retry_count = futures[future]["retry_count"]
-
-            try:
-                result = future.result(timeout=30)  # Wait for 10 seconds
-                results.append(result)
-            except TimeoutError:
-                print(f"Timeout for batch {batch}, retrying...")
-                if retry_count < 3:
-                    # Resubmit the failed batch
-                    new_future = executor.submit(classify, batch, i, batch_size)
-                    futures[new_future] = {'batch': batch, 'retry_count': retry_count + 1}
-                else:
-                    print(f"Failed after {retry_count} retries.")
-            finally:
-                del futures[future]  # Remove the old future, whether we retry or not
+        while futures:
+            for future in list(futures.keys()):  # Make a list from keys to iterate safely while removing items
+                batch = futures[future]["batch"]
+                retry_count = futures[future]["retry_count"]
+                try:
+                    batch_result = future.result(timeout=30)  # Wait for 10 seconds
+                    res.append(batch_result)
+                except TimeoutError:
+                    print(f"Timeout for batch {batch}, retrying...")
+                    if retry_count < 3:
+                        # Resubmit the failed batch
+                        new_future = executor.submit(classify, batch, i, batch_size)
+                        futures[new_future] = {'batch': batch, 'retry_count': retry_count + 1}
+                    else:
+                        print(f"Failed after {retry_count} retries.")
+                finally:
+                    del futures[future]  # Remove the old future, whether we retry or not
+    return res
 
 
-end_time = time.time()
-elapsed_time = end_time - start_time
-print(f"done in {elapsed_time} seconds")
-file_name = "res_" + str(uuid.uuid4())[:4] + ".txt"
-print(f"writing results to {file_name}")
+def write_to_file(res):
+    file_name = "res_" + str(uuid.uuid4())[:4] + ".txt"
+    print(f"writing results to {file_name}")
+    with open(file_name, "w") as f:
+        f.write("\n".join(res))
 
-with open(file_name, "w") as f:
-    f.write("\n".join(results))
+
+if __name__ == "__main__":
+    input_lines = read_lines()
+
+    start_time = time.time()
+    results = process_lines(input_lines[:100])
+    end_time = time.time()
+
+    print(f"done in {end_time - start_time} seconds")
+
+    write_to_file(results)
